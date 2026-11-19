@@ -1,0 +1,66 @@
+# @package _global_
+
+defaults:
+  - /paths: ${oc.env:C3WM_PLATFORM,local}
+  - /comm/env@env: findgoal
+  - /train/model@jepa: control_jepa
+  - _self_
+
+kind: dreamer
+features: vit
+
+checkpoints:
+  jepa: ???
+
+env_id: MultiGrid-FindGoal-15x15-v0
+layouts: [0, 200]
+actions: 3
+num_envs: 8
+image_size: 64
+team_reward: false
+near_coeff: 0.1
+
+comm:
+  comm_range: null
+  drop_prob: 0.1
+  gnn_dim: null
+model:
+  size: 12M
+  rep_loss: dreamer
+  overrides:
+    deter: 512
+    hidden: 256
+    units: 256
+    discrete: null
+train:
+  steps: 1000000
+  batch_size: 16
+  batch_length: 64
+  train_ratio: 64
+  capacity: 200000
+  log_every: 5000
+save_every: 50000
+seed: 0
+device: cuda
+out_dir: ${paths.run}
+
+pipeline:
+  history_size: 3
+  num_preds: 1
+  embed_dim: 192
+  img_size: 224
+  msg_embedding_dim: 256
+  num_embeddings: 256
+
+wandb:
+  enabled: true
+  mode: online
+  project: ${paths.phase}
+  name: null
+
+paths:
+  phase: baselines
+
+hydra:
+  run:
+    dir: ${paths.hydra}

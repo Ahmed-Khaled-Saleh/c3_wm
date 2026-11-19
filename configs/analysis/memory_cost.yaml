@@ -1,0 +1,57 @@
+# @package _global_
+
+defaults:
+  - /paths: ${oc.env:C3WM_PLATFORM,local}
+  - /train/model@vqvae: vqvae
+  - _self_
+
+cache: ???
+data_dir: null
+
+checkpoints:
+  vqvae: null
+  memory_cost: null
+max_prefix: 160
+drop: null
+steps: 8000
+batch_size: 256
+lr: 1.0e-3
+weight_decay: 1.0e-4
+noise: 0.0
+rank_weight: 0.0
+aux_weight: 5.0
+
+head:
+  hidden: 256
+  reads: tokens
+  token_dim: 64
+  queries: 4
+  dropout: 0.0
+eval_every: 500
+train_eval_windows: 4096
+log_every: 50
+seed: 0
+num_workers: 16
+device: cuda
+out_dir: ${paths.run}
+
+pipeline:
+  history_size: 3
+  num_preds: 1
+  embed_dim: 192
+  img_size: 224
+  msg_embedding_dim: 256
+  num_embeddings: 256
+
+wandb:
+  enabled: true
+  project: phase-2-wm-finetune
+  mode: online
+  name: null
+
+paths:
+  phase: ${wandb.project}
+
+hydra:
+  run:
+    dir: ${paths.hydra}

@@ -1,0 +1,321 @@
+__all__ = ['TrainerScheduler', 'BaseTrainer', 'codebook_id', 'encode_tokens', 'WMFinetuner']
+
+import math
+import torch
+import os
+import torch.nn as nn
+from torch.utils.data import DataLoader
+import torchvision.utils as vutils
+import wandb
+import hydra
+from pathlib import Path
+from fastcore.utils import patch
+from loguru import logger
+from omegaconf import DictConfig
+from einops import rearrange
+import torch.nn.functional as F
+from ..utils.checkpointer import RetrospectiveCheckpointer
+import hashlib
+import h5py
+import numpy as np
+from torch.utils.data import Dataset
+from ..models.jepa import latest_messages
+from ..data.transforms import get_transforms
+
+
+class TrainerScheduler:
+    def __init__(self, wm_optimizer, select: str = "val_jepa_loss"):
+        self.select = select
+        self.wm_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            wm_optimizer, mode='min', factor=0.5, patience=5
+        )
+
+    def step(self, val_loss):
+        self.wm_scheduler.step(val_loss[self.select])
+
+
+class BaseTrainer:
+    def __init__(self,
+                 data_module,
+                 device,
+                 slurm_jobid= None,
+                 wm_lr=1e-4,
+                 epochs=100,
+                 project_name="c3_wm",
+                 ckp_dir= "checkpoints",
+                 save_dir= "outputs"):
+
+        self.data_module = data_module
+
+        self.device = device
+
+        self.data_module.setup()
+        self.train_loader = self.data_module.train_dataloader()
+        self.val_loader = self.data_module.val_dataloader()
+
+        self.slurm_jobid = slurm_jobid if slurm_jobid else "default_job"
+        self.wm_lr = wm_lr
+        self.epochs = epochs
+        self.project_name = project_name
+        self.ckp_dir = ckp_dir
+        self.save_dir = save_dir
+
+    def init_optimizer(self, model, lr, weight_decay=0.01):
+        return torch.optim.AdamW(
+                list(model.parameters()),
+                lr=lr,
+                weight_decay=weight_decay
+            )
+
+    def train_epoch(self, epoch):
+        raise NotImplementedError("train_epoch method must be implemented by subclasses.")
+
+    def validate_epoch(self, epoch):
+        raise NotImplementedError("validate method must be implemented by subclasses.")
+
+
+class _Frames(Dataset):
+    def __init__(self, h5_path, transform):
+        self.h5_path, self.transform, self.file = h5_path, transform, None
+        with h5py.File(h5_path, "r") as f:
+            self.rows, self.agents = f["pixels"].shape[:2]
+
+    def __len__(self):
+        return self.rows * self.agents
+
+    def __getitem__(self, idx):
+        if self.file is None:
+            self.file = h5py.File(self.h5_path, "r")
+        return self.transform(self.file["pixels"][idx // self.agents, idx % self.agents])
+
+def codebook_id(vqvae) -> str:
+    return hashlib.sha1(vqvae.vq_layer.embedding.detach().cpu().numpy().tobytes()).hexdigest()[:10]
+
+@torch.no_grad()
+def encode_tokens(h5_path, vqvae, out_dir=None, device="cpu", batch_size: int = 256, num_workers: int = 0):
+    out = Path(out_dir or Path(h5_path).parent) / f"tokens_{codebook_id(vqvae)}.npy"
+    if out.exists():
+        return out
+    frames = _Frames(h5_path, get_transforms(img_size=224)[1])
+    tokens = np.lib.format.open_memmap(out.with_suffix(".partial.npy"), mode="w+", dtype=np.uint8,
+                                       shape=(frames.rows, frames.agents, 49))
+    flat = tokens.reshape(-1, 49)
+    vqvae = vqvae.to(device).eval()
+    at = 0
+    for batch in DataLoader(frames, batch_size=batch_size, num_workers=num_workers):
+        idx = vqvae.get_message_indices(batch.to(device)).flatten(1)
+        flat[at:at + len(idx)] = idx.cpu().numpy().astype(np.uint8)
+        at += len(idx)
+        logger.info(f"tokens: {at}/{len(frames)} frames")
+    tokens.flush()
+    del tokens, flat
+    out.with_suffix(".partial.npy").rename(out)
+    return out
+
+class WMFinetuner(BaseTrainer):
+    def __init__(self, data_module, model, device, slurm_jobid, wm_lr,
+                 history_size, num_preds, lambda_sigreg, early_stop_patience=15,
+                 select: str = "val_pred_loss",
+                 erasure=None,
+                 tokens_dir=None,
+                 freeze_encoder: bool = True,
+                 snapshots=None,
+                 **kwargs):
+        self.model = model["jepa"].to(device)
+        self.vqvae = model["vqvae"].to(device)
+        h5_path = os.path.join(data_module.data_dir, "dataset.h5")
+        with h5py.File(h5_path, "r") as f:
+            if "pixels" not in f:
+                raise ValueError(f"{h5_path}: messages need collect_world.py's dataset (the old rollouts are not supported)")
+        data_module.tokens = encode_tokens(h5_path, self.vqvae, tokens_dir, device,
+                                           num_workers=getattr(data_module, "num_workers", 0))
+        data_module.max_age = self.model.predictor.max_age
+        super().__init__(
+            data_module=data_module, device=device, wm_lr=wm_lr,
+            slurm_jobid=slurm_jobid, **kwargs
+        )
+        self.history_size = history_size
+        self.num_preds = num_preds
+        self.lambda_sigreg = lambda_sigreg
+        self.early_stop_patience = early_stop_patience
+        self.select = select
+        self.erasure = {"all": 0.25, "none": 0.25, **(erasure or {})}
+        self.frozen = [self.model.encoder, self.model.projector] if freeze_encoder else []
+        for module in self.frozen:
+            module.requires_grad_(False)
+        self.best_val_loss = float("inf")
+        self.epochs_since_improvement = 0
+        self.snapshots = sorted(float(e) for e in (snapshots or []))
+
+        self.wm_optimizer = torch.optim.AdamW([p for p in self.model.parameters() if p.requires_grad],
+                                              lr=self.wm_lr, weight_decay=1e-3)
+        self.scheduler = TrainerScheduler(self.wm_optimizer, select)
+
+        self.save_dir = Path(hydra.utils.to_absolute_path(self.save_dir))
+        self.save_dir.mkdir(exist_ok=True, parents=True)
+
+        self.ck_pointer = RetrospectiveCheckpointer(
+            project_name=self.project_name, ckp_dir=self.ckp_dir,
+            slurm_jobid=self.slurm_jobid, agent_id="WM_trainer", rank=0, n_best=3
+        )
+
+        self.model.predictor.msg_token_embedding.weight.data[:self.vqvae.vq_layer.K].copy_(
+            self.vqvae.vq_layer.embedding.detach()
+        )
+
+@patch
+def fit(self: WMFinetuner, cfg: DictConfig):
+    for epoch in range(1, cfg.pipeline.max_epochs + 1):
+        train_loss = self.train_epoch(epoch)
+        metrics = self.evaluate_epoch(epoch)
+        self.scheduler.step(metrics)
+        self.checkpoint(epoch, metrics)
+
+        val_loss = metrics[self.select]
+        if val_loss < self.best_val_loss - 1e-4:
+            self.best_val_loss = val_loss
+            self.epochs_since_improvement = 0
+        else:
+            self.epochs_since_improvement += 1
+
+        if self.epochs_since_improvement >= self.early_stop_patience:
+            logger.info(f"Early stopping at epoch {epoch}: no improvement for {self.early_stop_patience} epochs.")
+            break
+
+
+@patch
+def erasure_rates(self: WMFinetuner, n: int):
+    u = torch.rand(n, device=self.device)
+    rate = torch.rand(n, device=self.device)
+    rate = torch.where(u < self.erasure["all"], torch.zeros_like(rate), rate)
+    return torch.where((u >= self.erasure["all"]) & (u < self.erasure["all"] + self.erasure["none"]), torch.ones_like(rate), rate)
+
+@patch
+def messages(self: WMFinetuner, batch, rate):
+    sent = batch["msg_sent"]
+    received = sent & (torch.rand(sent.shape, device=sent.device) >= rate.view(-1, 1, 1))
+    return latest_messages(batch["msg_tokens"], received, batch["msg_sender"], batch["msg_receiver"],
+                           steps=self.history_size, max_age=self.model.predictor.max_age)
+
+@patch
+def train_epoch(self: WMFinetuner, epoch):
+    self.model.train()
+    for module in self.frozen:
+        module.eval()
+
+    total_loss_jepa = 0.0
+    for batch_idx, batch in enumerate(self.train_loader):
+        batch = {k: v.to(self.device) for k, v in batch.items()}
+        jepa_loss = self.train_batch(epoch, batch)
+        total_loss_jepa += jepa_loss
+        self.snapshot(epoch, batch_idx + 1)
+
+        logger.info(f"Completed batch {batch_idx+1}/{len(self.train_loader)} for epoch {epoch} with JEPA loss {jepa_loss:.4f}")
+
+    avg_loss_jepa = total_loss_jepa / len(self.train_loader)
+
+    logger.info(f"Epoch [{epoch}/{self.epochs}] - Train JEPA Loss: {avg_loss_jepa:.4f}")
+
+    return avg_loss_jepa
+
+@patch
+def snapshot(self: WMFinetuner, epoch, batches):
+    n = len(self.train_loader)
+    for e in self.snapshots:
+        if max(1, round(e * n)) == (epoch - 1) * n + batches:
+            metrics = self.validate()
+            wandb.log({**{f"snapshot/{k}": v for k, v in metrics.items()}, "snapshot/epoch": e})
+            path = Path(self.ck_pointer.checkpoint_dir) / f"snapshot_epoch_{e:g}.pt"
+            torch.save({"epoch": e, "batches": (epoch - 1) * n + batches, "wm_model_state_dict": self.model.state_dict(),
+                        **metrics}, path)
+            logger.info(f"Snapshot at epoch {e:g} ({path}): " + ", ".join(f"{k}: {v:.4f}" for k, v in metrics.items()))
+            self.model.train()
+            for module in self.frozen:
+                module.eval()
+
+
+@patch
+def train_batch(self: WMFinetuner, epoch, batch):
+    B = batch["pixels"].shape[0]
+    T = self.history_size
+    self.wm_optimizer.zero_grad()
+
+    messages = self.messages(batch, self.erasure_rates(B))
+    output = self.model.encode(batch)
+
+    emb = output["emb"]
+    tgt_emb = emb[:, self.num_preds:]
+    act_emb = output["act_emb"].reshape(B, T, -1)
+
+    pred_emb = self.model.predict(emb[:, :T], act_emb[:, :T], messages)
+    output = self.model.loss_fn(output, pred_emb, tgt_emb, emb, self.lambda_sigreg)
+
+    loss_dict = {k: v for k, v in output.items() if "loss" in k}
+    wandb.log({f"train_{k}": v.item() for k, v in loss_dict.items()})
+
+    output['jepa_loss'].backward()
+    torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+    self.wm_optimizer.step()
+    return output['jepa_loss'].item()
+
+@patch
+def evaluate_epoch(self: WMFinetuner, epoch):
+    avg_metrics = self.validate()
+    logger.info(f"Epoch {epoch} | " + ", ".join(f"{k}: {v:.4f}" for k, v in avg_metrics.items()))
+    wandb.log({**avg_metrics, "epoch": epoch})
+    return avg_metrics
+
+@patch
+@torch.no_grad()
+def validate(self: WMFinetuner):
+    self.model.eval()
+
+    all_metrics = {}
+    for batch_idx, batch in enumerate(self.val_loader):
+        batch = {k: v.to(self.device) if torch.is_tensor(v) else v
+                for k, v in batch.items()}
+        metrics = self.evaluate_batch(batch)
+
+        for k, v in metrics.items():
+            all_metrics.setdefault(k, []).append(v)
+
+    avg_metrics = {k: sum(v) / len(v) for k, v in all_metrics.items()}
+    avg_metrics["val_message_gain"] = avg_metrics["val_pred_loss_no_messages"] - avg_metrics["val_pred_loss"]
+    return avg_metrics
+
+@patch
+@torch.no_grad()
+def evaluate_batch(self: WMFinetuner, batch):
+    B = batch["pixels"].shape[0]
+    T = self.history_size
+
+    output = self.model.encode(batch)
+    emb = output["emb"]
+    tgt_emb = emb[:, self.num_preds:]
+    act_emb = output["act_emb"].reshape(B, T, -1)
+
+    heard = self.model.predict(emb[:, :T], act_emb[:, :T], self.messages(batch, torch.zeros(B, device=self.device)))
+    alone = self.model.predict(emb[:, :T], act_emb[:, :T], self.messages(batch, torch.ones(B, device=self.device)))
+    output = self.model.loss_fn(output, heard, tgt_emb, emb, self.lambda_sigreg)
+
+    return {
+        "val_jepa_loss": output['jepa_loss'].item(),
+        "val_pred_loss": output['pred_loss'].item(),
+        "val_sigreg_loss": output['sigreg_loss'].item(),
+        "val_pred_loss_no_messages": (alone - tgt_emb).pow(2).mean().item(),
+    }
+
+@patch
+def checkpoint(self: WMFinetuner, epoch, val_loss):
+
+    checkpoint_state = {
+        "epoch": epoch,
+        "wm_optimizer_state_dict": self.wm_optimizer.state_dict(),
+        "wm_model_state_dict": self.model.state_dict(),
+        "val_jepa_loss": val_loss['val_jepa_loss'],
+        self.select: val_loss[self.select],
+        }
+
+    acc = -val_loss[self.select]
+
+    self.ck_pointer.save_checkpoint(state= checkpoint_state, current_acc= acc, step= epoch)

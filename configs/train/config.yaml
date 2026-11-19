@@ -1,0 +1,21 @@
+defaults:
+  - /paths: ${oc.env:C3WM_PLATFORM,local}
+  - pipeline: vqvae_pretrain
+  - _self_
+
+exp_params:
+  manual_seed: 1234
+
+logging_params:
+  project_name: "phase-1-vqvae_pretraining"
+  save_dir: ${paths.media}
+  ckp_dir: ${paths.checkpoints}
+
+paths:
+  phase: ${logging_params.project_name}
+
+hydra:
+  run:
+    dir: ${paths.hydra}
+  sweep:
+    dir: ${paths.hydra}

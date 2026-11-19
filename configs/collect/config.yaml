@@ -1,0 +1,35 @@
+# @package _global_
+
+defaults:
+  - /paths: ${oc.env:C3WM_PLATFORM,local}
+  - /comm/env@env: findgoal
+  - _self_
+
+stage: all
+out_dir: ${paths.datasets}/findgoal_layouts
+env_id: MultiGrid-FindGoal-15x15-v0
+
+layouts: [0, 260]
+episodes_per_layout: 40
+
+policy:
+  weights: {random: 0.2, epsilon_expert: 0.5, waypoint: 0.3}
+  epsilon: 0.3
+  seed: 0
+
+workers: ${oc.decode:${oc.env:SLURM_CPUS_PER_TASK,8}}
+chunk: 25
+num_envs: 1
+image_size: null
+overwrite: false
+
+shard:
+  index: ${oc.decode:${oc.env:SLURM_ARRAY_TASK_ID,0}}
+  count: ${oc.decode:${oc.env:SLURM_ARRAY_TASK_COUNT,1}}
+
+paths:
+  phase: collect
+
+hydra:
+  run:
+    dir: ${paths.hydra}

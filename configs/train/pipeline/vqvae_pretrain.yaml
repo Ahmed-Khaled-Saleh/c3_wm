@@ -1,0 +1,34 @@
+defaults:
+  - /datamodule: vqvae_data
+  - /model: vqvae
+  - _self_
+
+stage: 1
+
+lr: 3e-4
+max_epochs: 50
+
+model:
+  beta: 0.25
+  pre_quant_activation: false
+  dead_threshold: 0.03
+  recon_loss: mse
+
+datamodule:
+  data_dir: ${paths.datasets}/findgoal_layouts
+  val_layouts: [200, 260]
+  val_frames: 20000
+  num_workers: 8
+  persistent_workers: true
+
+trainer:
+  _target_: c3_wm.trainers.msg_trainer.VQVAETrainer
+  epochs: ${pipeline.max_epochs}
+  lr: ${pipeline.lr}
+  project_name: ${logging_params.project_name}
+  ckp_dir: ${logging_params.ckp_dir}
+  save_dir: ${logging_params.save_dir}
+  rarity_power: 0.5
+  tile_tolerance: 64
+  select: tiles
+  ignore: [ego]

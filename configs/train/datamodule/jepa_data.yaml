@@ -1,0 +1,10 @@
+_target_: c3_wm.data.data_module.WMDataModule
+
+batch_size: 512
+num_workers: 16
+persistent_workers: true
+history_size: ${pipeline.history_size}
+img_size: ${pipeline.img_size}
+data_dir: ${paths.datasets}/findgoal_layouts
+val_layouts: [200, 260]
+val_shuffle_seed: 0

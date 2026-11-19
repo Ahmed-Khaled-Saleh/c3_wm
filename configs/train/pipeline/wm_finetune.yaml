@@ -1,0 +1,53 @@
+defaults:
+  - /datamodule: jepa_data
+  - /model@model.jepa: control_jepa
+  - /model@model.vqvae: vqvae
+  - _self_
+
+stage: 2
+
+wm_lr: 1e-4
+max_epochs: 100
+num_workers: 6
+train_split: 0.9
+seed: 3072
+img_size: 224
+embed_dim: 192
+msg_embedding_dim: 256
+num_embeddings: 256
+history_size: 3
+blind: all
+
+model:
+  vqvae:
+    checkpoint_path: ???
+  jepa:
+    checkpoint_path: ???
+
+trainer:
+  _target_: c3_wm.trainers.wm_tune.WMFinetuner
+  epochs: ${pipeline.max_epochs}
+  project_name: ${logging_params.project_name}
+  ckp_dir: ${logging_params.ckp_dir}
+  save_dir: ${logging_params.save_dir}
+  wm_lr: ${pipeline.wm_lr}
+  history_size: ${pipeline.history_size}
+  num_preds: 1
+  lambda_sigreg: 0.1
+  early_stop_patience: 10
+  select: val_pred_loss
+  erasure: {all: 0.25, none: 0.25}
+  freeze_encoder: true
+  snapshots: null
+
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: ${pipeline.wm_lr}
+  weight_decay: 1e-3
+
+loss:
+  sigreg:
+    weight: 0.09
+    kwargs:
+      knots: 17
+      num_proj: 1024

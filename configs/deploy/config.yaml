@@ -1,0 +1,158 @@
+# @package _global_
+
+defaults:
+  - /paths: ${oc.env:C3WM_PLATFORM,local}
+  - /comm/env@env: findgoal
+  - /train/model@jepa: control_jepa
+  - /train/model@vqvae: vqvae
+  - _self_
+
+env:
+  variations: []
+
+data_dir: ${paths.datasets}/comm_power/deploy_fixed
+
+out_dir: ${paths.run}
+env_id: MultiGrid-FindGoal-15x15-v0
+layouts: [230, 260]
+layout_group:
+  file: ../configs/deploy/layouts.json
+  name: OOD
+max_start_distance: null
+
+episodes: 1024
+seed: 0
+num_envs: 16
+max_steps: 150
+device: cuda
+
+methods: ['no communication', 'perfect channel', 'perfect CSI', 'learned', 'lambda-policy']
+
+baseline_link: perfect channel
+
+diagnose_decisions: false
+
+agent_colors: null
+
+vary:
+  wall_color: null
+  goal_color: null
+  obstacles: null
+  clutter: null
+
+surprise:
+  kind: null
+  when: seen
+  delay: 5
+  min_move: 5
+new_colors:
+  orange: [255, 140, 0]
+  cyan: [0, 190, 190]
+  white: [255, 255, 255]
+baseline_sample: false
+
+delivery: 1.0
+
+withhold_from: null
+withhold_steps: null
+
+label: null
+
+record:
+  dir: null
+  method: perfect channel
+
+checkpoints:
+  jepa: ???
+  jepa_strict: true
+  vqvae: ???
+  power_control: ???
+  lambda_policy: null
+  gcrl: null
+  mappo: null
+  tarmac: null
+  commnet: null
+  mamba: null
+  dreamer: null
+  codreamer: null
+  omnivla: null
+  tile_codes: null
+  wall_head: null
+  prior: ???
+  memory_cost: ???
+  goal_head: null
+
+link:
+  crc: true
+  lambda_policy:
+    name: 'mean + spread, λ-policy'
+    target: 0.95
+  rician: true
+  step_seconds: 1.0
+  doppler_hz: 0.1
+  fading_correlation: null
+
+tracing:
+  frequency: 2.4e9
+  max_depth: 16
+  scene:
+    cell_size: 1.0
+    thickness: {inner_wall: 0.1, outer_wall: 0.15}
+  solver: {}
+
+actions: 3
+
+planner:
+  solver: stable_marl
+  horizon: 10
+  receding_horizon: 1
+  num_samples: 128
+  n_steps: 5
+  topk: 16
+  cost: min
+  step_cost: 0.01
+  novelty: episode
+  explore_within: 0.5
+  imagine_noise: 0.0
+  prior_seed: 0
+  escape_window: null
+  escape_cells: 3
+  record_surprise: false
+  forget_above: null
+  forget_keep: 0.0
+  reseed: false
+  resample_from: null
+  prior_weight: 0.5
+  temperature: 0.5
+  cic: 0
+  near_step_cost: null
+  near_below: 4.0
+  explore: true
+  explore_below: 0.1
+  predictor_messages: true
+  move_messages: false
+  message_effect: false
+  goal_cost: null
+  goal_from: messages
+  goal_source: oracle
+  wall_above: 0.5
+
+pipeline:
+  history_size: 3
+  embed_dim: 192
+  img_size: 224
+  msg_embedding_dim: 256
+  num_embeddings: 256
+
+wandb:
+  enabled: true
+  project: c3wm-deploy
+  mode: online
+  name: null
+
+paths:
+  phase: ${wandb.project}
+
+hydra:
+  run:
+    dir: ${paths.hydra}

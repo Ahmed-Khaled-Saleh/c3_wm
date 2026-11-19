@@ -1,0 +1,63 @@
+# @package _global_
+
+defaults:
+  - /paths: ${oc.env:C3WM_PLATFORM,local}
+  - /train/model@jepa: control_jepa
+  - _self_
+
+data_dir: ${paths.datasets}/findgoal_layouts
+layouts: [0, 200]
+features: pixels
+
+cache: null
+checkpoints:
+  jepa: null
+actions: 3
+pretrained: null
+
+labels: shortest_path
+
+trainable: all
+
+hindsight_prob: 0.5
+max_goal_steps: 20
+model:
+  context_size: 5
+  horizon: 8
+  encoding_size: 1024
+  num_heads: 4
+  num_layers: 4
+  image_size: 96
+train:
+  steps: 50000
+  batch_size: 64
+  lr: 1.0e-4
+  weight_decay: 0.01
+  dist_weight: 0.01
+  num_workers: 16
+  log_every: 500
+save_every: 5000
+seed: 0
+device: cuda
+out_dir: ${paths.run}
+
+wandb:
+  enabled: true
+  mode: online
+  project: ${paths.phase}
+  name: null
+
+pipeline:
+  history_size: 3
+  num_preds: 1
+  embed_dim: 192
+  img_size: 224
+  msg_embedding_dim: 256
+  num_embeddings: 256
+
+paths:
+  phase: baselines
+
+hydra:
+  run:
+    dir: ${paths.hydra}

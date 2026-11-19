@@ -1,0 +1,14 @@
+root: ???
+project: c3_wm
+env: findgoal
+phase: ???
+
+datasets: ${paths.root}/datasets/${paths.project}/${paths.env}
+experiments: ${paths.root}/experiments/${paths.project}/${paths.env}
+job: job_${oc.env:SLURM_JOB_ID,local}
+run: ${paths.experiments}/${paths.phase}/${now:%Y-%m-%d_%H-%M-%S}_${paths.job}
+checkpoints: ${paths.run}/checkpoints
+media: ${paths.run}/media
+hydra: ${paths.run}/hydra
+wandb: ${paths.run}/wandb
+slurm: ${paths.experiments}/${paths.phase}/slurm

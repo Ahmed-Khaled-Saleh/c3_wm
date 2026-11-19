@@ -1,0 +1,34 @@
+# @package _global_
+
+defaults:
+  - /paths: ${oc.env:C3WM_PLATFORM,local}
+  - _self_
+
+data_dir: ${paths.datasets}/findgoal_layouts
+
+features: pixels
+
+cache: null
+layouts: [0, 200]
+image_size: 64
+agent: gcbc
+num_actions: 4
+steps: 100000
+overrides: {}
+log_every: 1000
+seed: 0
+temperature: 0.0
+out_dir: ${paths.run}
+
+wandb:
+  enabled: true
+  mode: online
+  project: ${paths.phase}
+  name: null
+
+paths:
+  phase: baselines
+
+hydra:
+  run:
+    dir: ${paths.hydra}

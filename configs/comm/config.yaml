@@ -1,0 +1,181 @@
+defaults:
+  - /paths: ${oc.env:C3WM_PLATFORM,local}
+  - env: findgoal
+  - _self_
+
+env:
+  variations: [obstacles.number, clutter.number]
+
+stage: all
+data_name: comm_power_1m
+data_dir: ${paths.datasets}/comm_power/${data_name}
+out_dir: ${paths.run}
+
+power_control_from: null
+
+layouts:
+  train: [0, 200]
+  calibration: [200, 230]
+  test: [230, 260]
+
+planner:
+  enabled: true
+  data_dir: ${paths.datasets}/comm_power/deploy_fixed
+  trajectories: trajectories_planner
+  variations: []
+
+shard:
+  index: 0
+  count: 1
+
+tracing:
+  device: cuda
+  mode: pairs
+  frequency: 2.4e9
+  max_depth: 16
+  scene:
+    cell_size: 1.0
+    thickness:
+      inner_wall: 0.1
+      outer_wall: 0.15
+  solver: {}
+  overwrite: false
+
+rollouts:
+  episodes: 5
+  eval_episodes: 40
+  max_steps: ${env.max_steps}
+  policy: {random: 0.2, epsilon_expert: 0.5, waypoint: 0.3}
+  epsilon: 0.3
+  seed: 0
+  overwrite: false
+
+link:
+  snr_target_db: 10.0
+  noise_dbm: -94.0
+  max_power_dbm: -10.0
+  history: 4
+  history_data: null
+  channel: large_scale
+  fading: rician
+  step_seconds: 1.0
+  doppler_hz: 0.1
+  fading_correlation: null
+  symmetric: true
+  seed: 0
+
+predictor:
+  kind: trees
+  steps: false
+  quantile: 0.05
+  max_iter: 400
+  learning_rate: 0.05
+  sequence:
+    hidden: 64
+    layers: 1
+    head: 64
+    dropout: 0.0
+    epochs: 60
+    patience: 8
+    val_fraction: 0.15
+    batch_size: 512
+    lr: 2.0e-3
+    weight_decay: 1.0e-5
+    device: auto
+
+calibration:
+  target: 0.95
+  slack: 0.005
+  taus_db: [0.0, 1, 2, 3, 4, 5, 6, 8, 10, 12, 15, 20, 25, 30, .inf]
+  layouts:
+    coverage: 0.9
+    confidence: null
+    min_servable: 20
+
+evaluation:
+  targets: [0.9, 0.95, 0.99]
+  baselines: true
+  extra_predictors: []
+  snr_targets_db: [4, 7, 10, 13, 16]
+  message_bits: 392
+  bits_per_token: 8
+  network: true
+  network_targets: [0.95, 0.99]
+  network_layouts: 10
+
+deployment:
+  enabled: false
+  groups:
+    in-distribution: [0.0, 0.15]
+    slightly OOD: [0.2, 0.4]
+    OOD: [0.55, 1.0]
+  edited: [in-distribution, slightly OOD]
+  per_group: 30
+  pool: [1000, 20000]
+  first_id: 1000000
+  episodes: 40
+  pilot: 2
+  shifts:
+    expert: {policy: {epsilon_expert: 1.0}, epsilon: 0.0}
+    random: {policy: {random: 1.0}}
+  shift_episodes: 20
+  seed: 0
+  overwrite: false
+
+adaptation:
+  predictors: [geometry + history mean, geometry + history quantile (learned)]
+  min_servable: 50
+  confidence: 0.9
+  online:
+    steps_db: [0.25, 0.5, 1.0, 2.0]
+    failure_scales: [1.0, 0.75, 0.5, 0.25]
+    bounds_db: [-10.0, 30.0]
+
+monte_carlo:
+  runs: 1
+  resplit: true
+  network: false
+  snr_sweep: false
+  deployment: true
+  seed: 0
+
+continual:
+  enabled: false
+  layouts: deployment
+  order: groups
+  runs: 3
+  seed: 0
+  update_episodes: 2
+  recalibrate_every: 5
+  model: {kind: lstm, steps: false, mean: false}
+  methods: [frozen, finetune, replay, lars, ewc, si, lwf, joint]
+  trees: true
+  trees_every: 10
+  learning:
+    capacity: 5000
+    epochs: 20
+    batch_size: 64
+    lr: 5.0e-4
+    replay_weight: 0.5
+    ewc: 0.4
+    si: 0.4
+    si_xi: 0.1
+    lwf: 0.5
+    clip: 1.0
+    fisher_samples: 20000
+    device: auto
+
+wandb:
+  enabled: true
+  project: c3wm-comm-power
+  name: null
+  mode: online
+  dir: ${paths.wandb}
+  tags: []
+
+paths:
+  phase: ${wandb.project}
+
+hydra:
+  run:
+    dir: ${paths.hydra}

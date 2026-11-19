@@ -1,0 +1,88 @@
+__all__ = ['get_transforms']
+
+import torch
+import torchvision.transforms.v2 as v2
+import torch.nn.functional as F
+
+def get_transforms(env= "findgoal", model= "VQVAE", img_size= 224):
+
+    if model == "VQVAE" and env == "findgoal":
+
+        if img_size == 224:
+            resize_tf = v2.Identity()
+        else:
+            resize_tf = v2.Lambda(lambda x: F.interpolate(x.unsqueeze(0),
+                                                          size=(img_size, img_size),
+                                                          mode="area").squeeze(0))
+
+
+        train_transforms = v2.Compose(
+            [
+                v2.ToImage(),
+                v2.ToDtype(torch.float32, scale=True),
+                resize_tf,
+                v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ]
+        )
+
+        val_transforms = v2.Compose(
+            [
+                v2.ToImage(),
+                v2.ToDtype(torch.float32, scale=True),
+                resize_tf,
+                v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ]
+        )
+
+    elif model == "JEPA" and env == "findgoal":
+        train_transforms = v2.Compose([
+                v2.ToImage(),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+
+        val_transforms = v2.Compose([
+                v2.ToImage(),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            ])
+
+
+    elif model == "lejepa":
+        train_transforms = v2.Compose(
+                    [
+                        v2.ToPILImage(),
+                        v2.RandomResizedCrop(128, scale=(0.8, 1.0)),
+                        v2.RandomApply([v2.ColorJitter(0.4, 0.4, 0.4, 0.1)], p=0.8),
+                        v2.RandomGrayscale(p=0.2),
+                        v2.RandomApply([v2.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0))], p=0.1),
+                        v2.RandomHorizontalFlip(),
+                        v2.ToImage(),
+                        v2.ToDtype(torch.float32, scale=True),
+                        v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+                    ]
+                )
+
+
+        val_transforms = v2.Compose(
+                    [
+                        v2.ToPILImage(),
+                        v2.Resize(128),
+                        v2.CenterCrop(128),
+                        v2.ToImage(),
+                        v2.ToDtype(torch.float32, scale=True),
+                        v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+                    ]
+                )
+
+
+    else:
+        train_transforms = val_transforms = v2.Compose([
+            v2.ToPILImage(),
+            v2.ToImage(),
+            v2.ToDtype(torch.float32, scale=True),
+            v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+        ])
+
+
+    return train_transforms, val_transforms

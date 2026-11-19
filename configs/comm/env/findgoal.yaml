@@ -1,0 +1,7 @@
+_target_: stable_marl.envs.multigrid.FindGoalEnv
+agents: 2
+size: 15
+num_obstacles: 6
+n_clutter: 10
+max_steps: 150
+variations: []

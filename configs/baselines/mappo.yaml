@@ -1,0 +1,59 @@
+# @package _global_
+
+defaults:
+  - /paths: ${oc.env:C3WM_PLATFORM,local}
+  - /comm/env@env: findgoal
+  - /train/model@jepa: control_jepa
+  - _self_
+
+checkpoints:
+  jepa: ???
+env_id: MultiGrid-FindGoal-15x15-v0
+layouts: [0, 200]
+actions: 3
+num_envs: 16
+obs_keys: [view_emb, goal_emb, direction, position]
+
+critic: concat
+agent_specific: true
+model:
+  hidden_dim: 256
+  num_layers: 2
+train:
+  episodes: 100000
+  epochs: 10
+  minibatches: 4
+  lr: 5.0e-4
+  clip: 0.2
+  entropy_coef: 0.01
+  value_coef: 1.0
+  gamma: 0.99
+  lam: 0.95
+  max_grad_norm: 10.0
+  team_reward: true
+  log_every: 20
+save_every: 500
+seed: 0
+device: cuda
+out_dir: ${paths.run}
+
+pipeline:
+  history_size: 3
+  num_preds: 1
+  embed_dim: 192
+  img_size: 224
+  msg_embedding_dim: 256
+  num_embeddings: 256
+
+wandb:
+  enabled: true
+  mode: online
+  project: ${paths.phase}
+  name: null
+
+paths:
+  phase: baselines
+
+hydra:
+  run:
+    dir: ${paths.hydra}

@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "c3_wm"
+dynamic = ["version"]
+description = "C3-WM: communication-control co-adaptive world models for multi-agent planning"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+dependencies = [
+    "comm-core @ git+https://github.com/Ahmed-Khaled-Saleh/comm-core.git",
+    "stable-marl @ git+https://github.com/Ahmed-Khaled-Saleh/stable-marl.git",
+    "stable-pretraining @ git+https://github.com/galilai-group/stable-pretraining.git",
+    "torch",
+    "torchvision",
+    "numpy",
+    "scipy",
+    "pandas",
+    "einops",
+    "fastcore",
+    "gymnasium",
+    "h5py",
+    "matplotlib",
+    "scikit-learn",
+    "threadpoolctl",
+    "hydra-core",
+    "omegaconf",
+    "loguru",
+    "wandb",
+    "python-dotenv",
+    "sionna-rt",
+]
+
+[project.optional-dependencies]
+baselines = ["pettingzoo", "torchrl", "tensordict", "jax", "chex", "dm-tree"]
+
+[tool.setuptools.dynamic]
+version = {attr = "c3_wm.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["c3_wm*"]

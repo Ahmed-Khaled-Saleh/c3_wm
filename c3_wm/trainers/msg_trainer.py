@@ -1,0 +1,244 @@
+__all__ = ['BaseTrainer', 'VQVAETrainer']
+
+import torch
+import os
+from fastcore.utils import patch
+import torch.nn as nn
+import torchvision.utils as vutils
+import wandb
+import numpy as np
+from ..utils.checkpointer import RetrospectiveCheckpointer
+from ..data.datasets import TILE_NAMES
+import hydra
+from pathlib import Path
+from loguru import logger
+
+class BaseTrainer:
+    def __init__(self,
+                 data_module,
+                 device,
+                 slurm_jobid= None,
+                 lr=1e-4,
+                 epochs=100,
+                 project_name="c3_wm",
+                 ckp_dir= "checkpoints",
+                 save_dir= "outputs"):
+
+        self.data_module = data_module
+
+        self.device = device
+
+        self.data_module.setup()
+        self.train_loader = self.data_module.train_dataloader()
+        self.val_loader = self.data_module.val_dataloader()
+
+        self.slurm_jobid = slurm_jobid if slurm_jobid else "default_job"
+        self.lr = lr
+        self.epochs = epochs
+        self.project_name = project_name
+        self.ckp_dir = ckp_dir
+        self.save_dir = save_dir
+
+    def init_optimizer(self):
+        return torch.optim.Adam(self.model.parameters(), lr=self.lr)
+
+    def train_epoch(self, epoch):
+        raise NotImplementedError("train_epoch method must be implemented by subclasses.")
+
+    def validate_epoch(self, epoch):
+        raise NotImplementedError("validate method must be implemented by subclasses.")
+
+
+class VQVAETrainer(BaseTrainer):
+
+    def __init__(self, data_module, model, device,
+                 rarity_power: float = 0.0,
+                 tile_tolerance: float = 64,
+                 select: str = "tiles",
+                 ignore=(),
+                 **kwargs):
+        super().__init__(
+            data_module= data_module,
+            device= device,
+            **kwargs)
+
+        self.model = model.to(device)
+        self.optimizer = self.init_optimizer()
+        self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            self.optimizer, mode='min', factor=0.5, patience=5
+        )
+        self.tile_tolerance, self.select = tile_tolerance, select
+        self.ignored = [TILE_NAMES.index(k) for k in ignore]
+        self.tile_weights = None
+        if (rarity_power or ignore) and hasattr(self.data_module.train_dataset, "tile_frequencies"):
+            share = self.data_module.train_dataset.tile_frequencies()
+            w = np.where(share > 0, np.maximum(share, 1e-12) ** -rarity_power, 0.0)
+            w[self.ignored] = 0.0
+            w /= (share * w).sum()
+            self.tile_weights = torch.tensor(w, dtype=torch.float32, device=device)
+            logger.info("Tile weights: " + ", ".join(f"{n} {v:.2f}" for n, s, v in zip(TILE_NAMES, share, w) if s > 0))
+
+        self.save_dir = Path(hydra.utils.to_absolute_path(self.save_dir))
+        self.save_dir.mkdir(exist_ok=True, parents=True)
+
+        self.ck_pointer = RetrospectiveCheckpointer(project_name= self.project_name,
+                                                    ckp_dir= self.ckp_dir,
+                                                    slurm_jobid= self.slurm_jobid,
+                                                    agent_id= "vqvae_trainer",
+                                                    rank= 0,
+                                                    n_best=3)
+
+        os.makedirs(os.path.join(self.save_dir, "Reconstructions"), exist_ok=True)
+
+    def unpack(self, batch):
+        images, tiles = batch if isinstance(batch, (list, tuple)) else (batch, None)
+        return images.to(self.device), None if tiles is None else tiles.to(self.device)
+
+    def weights(self, tiles):
+        return None if tiles is None or self.tile_weights is None else self.tile_weights[tiles]
+
+@patch
+def fit(self: VQVAETrainer, cfg, early_stop_patience=15):
+    best_score = -float("inf")
+    epochs_since_improvement = 0
+
+    for epoch in range(1, cfg.pipeline.max_epochs + 1):
+        train_loss = self.train_epoch(epoch)
+        val_loss, score = self.validate_epoch(epoch)
+
+        self.scheduler.step(val_loss)
+        self.checkpoint(epoch, val_loss, score)
+
+        if score > best_score + 1e-4:
+            best_score = score
+            epochs_since_improvement = 0
+        else:
+            epochs_since_improvement += 1
+
+        if epochs_since_improvement >= early_stop_patience:
+            logger.info(f"Early stopping at epoch {epoch}: no improvement of the {self.select} score for {early_stop_patience} epochs.")
+            break
+
+@patch
+def train_epoch(self: VQVAETrainer, epoch: int):
+    self.model.train()
+    total_loss = 0.0
+
+    for batch_idx, batch in enumerate(self.train_loader):
+        real_img, tiles = self.unpack(batch)
+
+        self.optimizer.zero_grad()
+
+        recons, input_img, vq_loss, perplexity = self.model(real_img)
+
+        loss_dict = self.model.loss_function(
+            recons,
+            input_img,
+            vq_loss,
+            perplexity,
+            weights=self.weights(tiles),
+        )
+        logger.info(f"Batch {batch_idx}/{len(self.train_loader)} | Loss: {loss_dict['loss'].item():.4f}")
+
+        loss = loss_dict["loss"]
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
+        self.optimizer.step()
+
+        total_loss += loss.item()
+
+        wandb.log({f"train_{k}": v.item() for k, v in loss_dict.items()})
+
+    avg_loss = total_loss / len(self.train_loader)
+    logger.info(f"Epoch {epoch:02d} | Train Loss: {avg_loss:.4f}")
+    return avg_loss
+
+
+@patch
+@torch.no_grad()
+def sample_and_save_images(self: VQVAETrainer, test_loader, epoch, n: int = 16):
+    self.model.eval()
+
+    test_input, _ = self.unpack(next(iter(test_loader)))
+    test_input = test_input[:n]
+    recons = self.model.generate(test_input)
+    rows = [x for k in range(0, len(test_input), 8) for x in (test_input[k:k + 8], recons[k:k + 8])]
+
+    recons_path = os.path.join(
+        self.save_dir, "Reconstructions", f"recons_Epoch_{epoch}.png"
+    )
+    vutils.save_image(torch.cat(rows), recons_path, normalize=True, value_range=(-1, 1), nrow=8)
+
+    wandb.log(
+        {"Visual Reconstructions": wandb.Image(recons_path, caption=f"Epoch {epoch}: inputs above their reconstructions")}
+    )
+
+@patch
+@torch.no_grad()
+def tile_errors(self: VQVAETrainer, recons, images):
+    err = (recons - images).abs() * 127.5
+    B, C, H, W = err.shape
+    return err.view(B, C, 7, H // 7, 7, W // 7).amax(dim=(1, 3, 5))
+
+@patch
+@torch.no_grad()
+def validate_epoch(self: VQVAETrainer, epoch: int):
+    self.model.eval()
+    total_loss = 0.0
+    total_perplexity = 0.0
+    hits, counts = torch.zeros(len(TILE_NAMES)), torch.zeros(len(TILE_NAMES))
+    goal_frames, goal_lost = 0, 0
+    code_counts = torch.zeros(self.model.num_embeddings)
+    goal = TILE_NAMES.index("goal")
+
+    for batch_idx, batch in enumerate(self.val_loader):
+        real_img, tiles = self.unpack(batch)
+
+        recons, input_img, vq_loss, perplexity = self.model(real_img)
+        loss_dict = self.model.loss_function(
+            recons, input_img, vq_loss, perplexity, M_N=1.0, batch_idx=batch_idx, weights=self.weights(tiles)
+        )
+
+        total_loss += loss_dict["loss"].item()
+        total_perplexity += loss_dict["Perplexity"].item()
+        code_counts += torch.bincount(self.model.get_message_indices(real_img).flatten(), minlength=len(code_counts)).cpu()
+        if tiles is not None:
+            ok = self.tile_errors(recons, input_img) <= self.tile_tolerance
+            hits += torch.bincount(tiles[ok], minlength=len(TILE_NAMES)).cpu()
+            counts += torch.bincount(tiles.flatten(), minlength=len(TILE_NAMES)).cpu()
+            shown = (tiles == goal).flatten(1).any(1)
+            goal_frames += shown.sum().item()
+            goal_lost += (((tiles == goal) & ~ok).flatten(1).any(1)).sum().item()
+
+    avg_loss = total_loss / len(self.val_loader)
+    usage = code_counts / code_counts.sum()
+    perplexity = torch.exp(-(usage * torch.log(usage + 1e-10)).sum()).item()
+    logs = {"val_loss": avg_loss, "perplexity": perplexity, "perplexity_per_batch": total_perplexity / len(self.val_loader),
+            "val_codes_used": int((code_counts > 0).sum()), "epoch": epoch}
+    score = -avg_loss
+    if counts.sum() > 0:
+        seen = counts > 0
+        accuracy = hits / counts.clamp(min=1)
+        logs.update({f"val_tiles/{TILE_NAMES[k]}": accuracy[k].item() for k in seen.nonzero().flatten().tolist()})
+        scored = seen.clone()
+        scored[self.ignored] = False
+        logs.update({"val_tiles/mean": accuracy[scored].mean().item(), "val_goal_lost": goal_lost / max(goal_frames, 1)})
+        if self.select == "tiles":
+            score = accuracy[scored].mean().item()
+    logger.info(f"Epoch {epoch:02d} | " + ", ".join(f"{k}: {v:.4f}" for k, v in logs.items() if k != "epoch"))
+
+    wandb.log(logs)
+
+    self.sample_and_save_images(self.val_loader, epoch)
+    return avg_loss, score
+
+@patch
+def checkpoint(self: VQVAETrainer, epoch, val_loss, score=None):
+    checkpoint_state = {
+            "epoch": epoch,
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "val_loss": val_loss,
+            "score": score,
+        }
+    self.ck_pointer.save_checkpoint(state= checkpoint_state, current_acc= -val_loss if score is None else score, step= epoch)
