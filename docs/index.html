@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>C3-WM</title>
+<meta name="description" content="C3-WM: a communication–control co-adaptive world model for networked multi-agent systems.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #ffffff;
+  --text: #1d1d1f;
+  --muted: #5f6368;
+  --rule: #e3e3e6;
+  --panel: #f6f6f8;
+  --accent: #1f4fbf;
+  --accent-text: #ffffff;
+  --button: #1d1d1f;
+  --button-text: #ffffff;
+  --button-off: #c9c9cf;
+  --figure: #ffffff;
+  --best: #e9f0ff;
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 17px/1.65 "Source Serif 4", Georgia, serif;
+}
+main { max-width: 880px; margin: 0 auto; padding: 0 16px 80px; }
+.hero {
+  position: sticky;
+  top: 0;
+  z-index: 0;
+  overflow: hidden;
+  width: 100%;
+  aspect-ratio: 990 / 498;
+  background: #1a1d24;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hero-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hero-shade {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(14, 17, 24, 0.62) 0%, rgba(14, 17, 24, 0.30) 70%);
+}
+.hero-title {
+  position: relative;
+  will-change: transform, opacity;
+  max-width: 900px;
+  margin: 0;
+  padding: 0 24px;
+  text-align: center;
+  color: #ffffff;
+  font: 600 clamp(1.05rem, 3.1vw, 2.5rem)/1.25 Inter, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  text-shadow: 0 2px 16px rgba(0, 0, 0, 0.55);
+}
+.hero-title .short {
+  display: block;
+  width: fit-content;
+  margin: 0 auto 0.3em;
+  font-size: 1.9em;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: 0.02em;
+  color: #ff5a4c;
+  text-shadow: none;
+  filter: drop-shadow(0 2px 14px rgba(0, 0, 0, 0.6));
+}
+.key { font-weight: 800; color: #d42e22; }
+.hero-title .key { color: #ff5a4c; }
+.paper-title {
+  max-width: 820px;
+  margin: 0 auto 22px;
+  font: 700 clamp(1.7rem, 4.4vw, 2.75rem)/1.18 Inter, system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.hero-note { margin: 0 auto; padding: 16px 16px 0; text-align: center; font: 0.8rem/1.4 Inter, system-ui, sans-serif; color: var(--muted); }
+.byline { text-align: center; padding: 28px 16px 8px; }
+.authors { font: 500 1.08rem/1.6 Inter, system-ui, sans-serif; margin: 0; }
+.affiliation { color: var(--muted); margin: 4px 0 24px; font-size: 0.98rem; }
+.links { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+.links a, .links span {
+  font: 500 0.92rem/1 Inter, system-ui, sans-serif;
+  padding: 11px 18px;
+  border-radius: 999px;
+  text-decoration: none;
+  background: var(--button);
+  color: var(--button-text);
+}
+.links span { background: var(--button-off); cursor: default; }
+
+.sheet {
+  position: relative;
+  z-index: 1;
+  background: var(--bg);
+  box-shadow: 0 -14px 32px rgba(0, 0, 0, 0.18);
+  border-radius: 18px 18px 0 0;
+}
+a { color: var(--accent); }
+p { margin: 0 0 16px; }
+figure { margin: 28px 0; }
+figure img, figure video {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  background: var(--figure);
+}
+figure.plain img { padding: 12px; }
+figcaption { color: var(--muted); font-size: 0.93rem; line-height: 1.55; margin-top: 10px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+.grid2 figure, .grid3 figure { margin: 0; }
+.abstract { background: var(--panel); border-radius: 10px; padding: 22px 26px; }
+.abstract p:last-child { margin: 0; }
+.table-wrap { overflow-x: auto; margin: 24px 0 8px; }
+table { border-collapse: collapse; width: 100%; font: 0.86rem/1.4 Inter, system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+th, td { padding: 7px 9px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+thead th { font-weight: 600; vertical-align: bottom; }
+tr.group td { padding-top: 14px; color: var(--muted); font-weight: 600; text-align: left; border-bottom: none; }
+tr.ours td { background: var(--best); font-weight: 600; }
+.note { color: var(--muted); font-size: 0.9rem; }
+.contrib { margin: 0 0 16px; padding-left: 22px; }
+figure.narrow img { max-width: 640px; margin: 0 auto; }
+figure.narrow figcaption { text-align: center; }
+.contrib li { margin-bottom: 8px; }
+.ci { color: var(--muted); font-size: 0.85em; }
+pre {
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  font: 0.84rem/1.55 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+footer { color: var(--muted); font-size: 0.88rem; text-align: center; margin-top: 64px; }
+@media (max-width: 680px) {
+  body { font-size: 16px; }
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .abstract { padding: 18px; }
+}
+</style>
+</head>
+<body>
+<header class="hero">
+  <video class="hero-video" src="videos/montage.mp4" poster="videos/montage.jpg" autoplay loop muted playsinline aria-hidden="true"></video>
+  <div class="hero-shade"></div>
+  <h1 class="hero-title"><span class="short">C3-WM</span>A <b class="key">C</b>ommunication–<b class="key">C</b>ontrol <b class="key">C</b>o-adaptive <b class="key">W</b>orld <b class="key">M</b>odel for Networked Multi-Agent Systems</h1>
+</header>
+<div class="sheet">
+<p class="hero-note">C3-WM agents with communication on test layouts not seen during training.</p>
+
+<section class="byline">
+  <h2 class="paper-title">C3-WM: A <b class="key">C</b>ommunication–<b class="key">C</b>ontrol <b class="key">C</b>o-adaptive <b class="key">W</b>orld <b class="key">M</b>odel for Networked Multi-Agent Systems</h2>
+  <p class="authors">Ahmed Elbakary, Chathuranga Weeraddana, Mehdi Bennis</p>
+  <p class="affiliation">Centre for Wireless Communications, University of Oulu, Finland</p>
+  <nav class="links">
+    <span title="Available soon">Paper</span>
+    <span title="Available soon">Slides</span>
+    <a href="https://github.com/Ahmed-Khaled-Saleh/c3_wm">Code</a>
+    <a href="https://huggingface.co/datasets/ahmedkhaled/C3-wm-V1">Dataset</a>
+    <a href="https://huggingface.co/ahmedkhaled/C3-wm-V1">Checkpoints</a>
+  </nav>
+</section>
+
+<main>
+
+<h2>Abstract</h2>
+<section class="abstract">
+  <p>Decentralized coordination in networked multi-agent systems under partial observability requires agents to
+    exchange information over wireless channels with limited communication resources. Existing multi-agent learning
+    methods largely assume ideal communication, treating message passing as cost-free and excluding channel
+    constraints from the decision-making loop. We propose C3-WM, a communication–control co-adaptive world model
+    framework that couples representation learning with communication scheduling under wireless constraints. C3-WM
+    follows a centralized-training, decentralized-execution paradigm. During offline training, each agent learns a
+    local latent world model based on a joint-embedding predictive architecture, together with a vector-quantized
+    communication model that maps observations to discrete tokens transmitted over the channel. At execution, agents
+    plan by model predictive control entirely in latent space. We conduct several experiments to evaluate the
+    proposed framework in terms of task performance and communication efficiency. Our method outperforms the
+    baselines in task performance across the evaluation settings, requiring no online interaction for learning and
+    substantially reducing communication overhead.</p>
+</section>
+
+<h2>Introduction</h2>
+
+<h3>The problem</h3>
+<p>Teams of robots, drones and vehicles must coordinate while each one sees only part of its surroundings. To act
+  well, they need to share what they see. Learned world models let a single agent plan by imagining the outcome of
+  its actions, but in a team, an agent's own view is often not enough to predict what happens next. It needs
+  information from its partners.</p>
+<p>Most multi-agent learning methods assume that this information arrives instantly and without errors. Real robot
+  teams communicate over wireless links with limited transmit power, fading and lost packets. A transmitter also
+  rarely knows the current state of the channel, because measuring and reporting it takes time. A method trained
+  with perfect communication therefore does not carry over to a real network.</p>
+
+<h3>Our approach</h3>
+<p>C3-WM couples planning with communication over a realistic wireless channel. Each agent plans its actions with
+  its own latent world model and model predictive control. It sends its partners a compact message of discrete
+  tokens that describes what it sees. A lightweight power-control policy predicts the channel from past
+  measurements and decides whether to transmit and with what power.</p>
+<p>At the receiver, the messages enter both the world model and an episodic memory. A learned cost combines the
+  memory with imagined future states to estimate how far the goal is, which lets the planner head toward goals
+  outside the agent's own view.</p>
+
+<h3>Contributions</h3>
+<ul class="contrib">
+  <li>A formulation of decentralized, world-model-based cooperative control over wireless channels, with
+    physical-layer impairments and communication limits included.</li>
+  <li>C3-WM, a communication-aware world model that learns latent dynamics and discrete communication tokens for
+    decentralized control.</li>
+  <li>The λ-policy, a power-control policy that estimates the channel-gain distribution from past measurements and
+    sets the transmit power, or skips the transmission, to meet a target reliability without instantaneous channel
+    knowledge.</li>
+  <li>A message-conditioned world model and episodic memory that use the received tokens, with a learned cost that
+    guides planning toward goals beyond the agent's view.</li>
+  <li>An evaluation on reward-free cooperative navigation in unseen layouts with ray-traced wireless channels:
+    89.2% success, ahead of offline and online reinforcement-learning baselines, with messages adding 5.9 points.
+    With the λ-policy, success stays close to the ideal channel while using 16% less transmit power than a
+    margin-based policy at the same reliability.</li>
+</ul>
+
+<figure>
+  <video src="videos/episode_1.mp4" poster="videos/episode_1.jpg" autoplay loop muted playsinline controls></video>
+  <figcaption>The same test episode without and with communication. The red agent sees the goal at step 2. Without
+    messages, the blue agent keeps exploring and reaches the goal at step 54. With messages, it turns toward the goal
+    and reaches it at step 13.</figcaption>
+</figure>
+
+<h2>Method</h2>
+<p>C3-WM is trained offline from a dataset of recorded episodes, with no reward signal and no interaction with the
+  environment. At execution, each agent acts on its own: it encodes its view, sends a message, receives its
+  partners' messages, and plans in latent space. The figure below shows one transmitter and one receiver.</p>
+
+<figure>
+  <a href="img/online-execution.png"><img src="img/online-execution.png" alt="Diagram of decentralized execution: the transmitter encodes its observation into tokens sent over a fading channel with power chosen by the lambda-policy; the receiver embeds the message and plans with imagined rollouts of its world model, a memory, a cost head and a policy prior." loading="lazy"></a>
+  <figcaption>Decentralized execution. Transmitter j encodes its observation into tokens and sends them with the power
+    selected by the λ-policy. Receiver i keeps the latest message, adds it to the predictor's context, and plans with
+    imagined rollouts scored by a memory-based cost and a policy prior.</figcaption>
+</figure>
+
+<h3>Messages</h3>
+<p>A VQ-VAE, MsgNet, maps each observation to a grid of codebook indices. Only the indices are transmitted, as a
+  short binary message with an error-detecting code, so a message is a few hundred bits regardless of the image
+  size. The receiver keeps the most recent message from each partner for a few steps.</p>
+<figure class="plain narrow">
+  <a href="img/msgnet-training.png"><img src="img/msgnet-training.png" alt="Training setup of MsgNet, a VQ-VAE whose codeword indices form the transmitted message." loading="lazy"></a>
+  <figcaption>Training of MsgNet.</figcaption>
+</figure>
+
+<h3>World model</h3>
+<p>The world model is a joint-embedding predictive architecture: it predicts the next latent state rather than
+  the next image. It is trained in two stages. First, the encoder and a predictor without messages are trained
+  together. Then the predictor is fine-tuned to read the received messages through the message-conditioned block
+  (MCB), which accepts any number of partners with a fixed number of parameters.</p>
+<div class="grid2">
+  <figure class="plain">
+    <a href="img/wm-training.png"><img src="img/wm-training.png" alt="Two-stage training of the world model: joint training of the encoder and a message-free predictor, then fine-tuning with messages." loading="lazy"></a>
+    <figcaption>Two-stage training of the world model.</figcaption>
+  </figure>
+  <figure class="plain">
+    <a href="img/mcb.png"><img src="img/mcb.png" alt="Architecture of the predictor with the message-conditioned block." loading="lazy"></a>
+    <figcaption>The predictor and its message-conditioned block.</figcaption>
+  </figure>
+</div>
+
+<h3>Power control: the λ-policy</h3>
+<p>Before each transmission, the transmitter predicts the distribution of the channel gain from the recent gains
+  of the link and the agents' positions. The λ-policy then picks the power that best trades transmit power against
+  the probability that the message arrives, with a single multiplier λ setting the trade-off, and it skips the
+  transmission when the link is too weak to serve. The gain distribution is estimated with split conformal
+  prediction, and λ is calibrated on held-out layouts so that the target reliability is met.</p>
+
+<h3>Planning</h3>
+<p>The goal is often outside the agent's view, so each agent keeps an episodic memory of what it has seen and
+  heard, a cost head that predicts the moves left to the goal, and a policy prior. The planner imagines many
+  candidate action sequences with the world model, scores them with these modules, and refines the best ones over
+  several iterations before taking the first action.</p>
+<figure class="plain narrow">
+  <a href="img/planning-training.png"><img src="img/planning-training.png" alt="Training of the planning modules: memory and cost head on observed and imagined steps, then the policy prior with the memory frozen." loading="lazy"></a>
+  <figcaption>Training of the planning modules.</figcaption>
+</figure>
+
+<h2>Experimental setup</h2>
+<p><strong>Environment.</strong> FindGoal, a 15 × 15 grid world with two cooperative agents. Each agent sees a
+  224 × 224 image of the 7 × 7 cells around it and can turn left, turn right, move forward or stay. An episode
+  succeeds when both agents reach the shared goal within 150 steps. C3-WM does not use the environment's reward.</p>
+<p><strong>Data.</strong> 40 recorded episodes on each of 200 training layouts, 8,000 episodes in total, from a
+  mix of random, shortest-path and waypoint behaviours. Validation uses 60 other layouts, and all results are on 50
+  test layouts not seen during training.</p>
+<p><strong>Channel.</strong> Channels are ray-traced with Sionna RT at 2.4 GHz, with 1 m cells and a single
+  omnidirectional antenna per agent, and small-scale Rician fading on top. The target SNR is 10 dB.</p>
+<p><strong>Baselines.</strong> Offline methods (CommNet, OmniVLA-edge, GCBC, HIQL) and online methods (MAPPO,
+  TarMAC, DreamerV3, CoDreamer, MAMBA), with and without communication. Every method receives each agent's view,
+  position and heading, and an image of the goal, but not the goal's location.</p>
+
+<h2>Results</h2>
+
+<h3>Task performance</h3>
+<p>All methods are evaluated on the same 1,024 test episodes.</p>
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th rowspan="2">Method (encoder)</th><th colspan="3">Success within T, perfect channel (%)</th><th colspan="2">Success within 150 (%)</th><th rowspan="2">Length</th></tr>
+    <tr><th>T = 50</th><th>T = 100</th><th>T = 150</th><th>λ-link</th><th>No messages</th></tr>
+  </thead>
+  <tbody>
+    <tr class="group"><td colspan="7">Offline methods</td></tr>
+    <tr><td>CommNet (ViT)</td><td>27.5</td><td>50.4</td><td>60.5</td><td>63.4</td><td>–</td><td>96.5</td></tr>
+    <tr><td>OmniVLA-edge (EffNet)</td><td>45.9</td><td>74.4</td><td>85.5</td><td>–</td><td>–</td><td>70.0</td></tr>
+    <tr><td>GCBC (CNN)</td><td>37.4</td><td>60.8</td><td>70.6</td><td>–</td><td>–</td><td>84.4</td></tr>
+    <tr><td>HIQL (CNN)</td><td>39.8</td><td>62.1</td><td>72.1</td><td>–</td><td>–</td><td>82.1</td></tr>
+    <tr class="group"><td colspan="7">Online methods</td></tr>
+    <tr><td>MAPPO (ViT)</td><td>33.5</td><td>51.3</td><td>59.6</td><td>–</td><td>–</td><td>92.7</td></tr>
+    <tr><td>TarMAC (ViT)</td><td>2.2</td><td>6.5</td><td>12.0</td><td>12.4</td><td>–</td><td>142.7</td></tr>
+    <tr><td>DreamerV3 (CNN)</td><td>2.0</td><td>5.0</td><td>20.8</td><td>–</td><td>–</td><td>134.8</td></tr>
+    <tr><td>CoDreamer (CNN)</td><td>0.6</td><td>0.9</td><td>7.8</td><td>–</td><td>–</td><td>144.4</td></tr>
+    <tr><td>MAMBA (ViT)</td><td>0.1</td><td>0.6</td><td>1.7</td><td>–</td><td>–</td><td>149.2</td></tr>
+    <tr class="group"><td colspan="7">Ours</td></tr>
+    <tr class="ours"><td>C3-WM</td><td>80.3</td><td>86.0</td><td>89.2</td><td>88.4</td><td>83.3</td><td>41.2</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="note">Success: all agents reach the goal within T steps. λ-link: messages sent over the wireless link with
+  the λ-policy at a 95% reliability target. Length: mean episode length, with failures counted as 150 steps.</p>
+
+<figure class="plain narrow">
+  <a href="img/success-budget.png"><img src="img/success-budget.png" alt="Success rate of each method as a function of the step budget T on the 1,024 test episodes." loading="lazy"></a>
+  <figcaption>Success rate within a step budget T on the 1,024 test episodes.</figcaption>
+</figure>
+
+<h3>Wireless communication and power control</h3>
+<p>At a 95% reliability target, the λ-policy uses 2.63 times the power of a transmitter with perfect channel
+  knowledge, against 3.13 and 3.43 times for the margin policy with a mean and a linear gain predictor. It needs only
+  1.34 times the power of the optimal policy, which knows the true conditional distribution of the channel gain.</p>
+<div class="grid3">
+  <figure class="plain">
+    <a href="img/frontier.png"><img src="img/frontier.png" alt="Reliability against mean transmit power for each power-control policy." loading="lazy"></a>
+    <figcaption>Reliability against mean transmit power, with the operating points for targets 0.90, 0.95 and 0.99.</figcaption>
+  </figure>
+  <figure class="plain">
+    <a href="img/delivery-sweep.png"><img src="img/delivery-sweep.png" alt="Success rate of C3-WM against the share of messages delivered." loading="lazy"></a>
+    <figcaption>Success rate of C3-WM as messages are erased over a perfect channel.</figcaption>
+  </figure>
+  <figure class="plain">
+    <a href="img/snr-sweep.png"><img src="img/snr-sweep.png" alt="Reliability of the lambda-policy across target SNRs from 4 to 16 dB." loading="lazy"></a>
+    <figcaption>The λ-policy across target SNRs from 4 to 16 dB.</figcaption>
+  </figure>
+</div>
+
+<h3>The role of communication</h3>
+<p>In these episodes, one agent sees the goal first. Its messages reach the other agent before that agent has seen
+  the goal itself, and the other agent heads toward it. Most of this benefit comes through the agent's memory: when
+  only the memory receives messages, the success rate is 88.2%, close to the full method, while messages given only
+  to the predictor leave it at 83.3%, the same as without communication.</p>
+<figure>
+  <video src="videos/episode_133.mp4" poster="videos/episode_133.jpg" loop muted playsinline controls preload="none"></video>
+</figure>
+<figure>
+  <video src="videos/episode_130.mp4" poster="videos/episode_130.jpg" loop muted playsinline controls preload="none"></video>
+</figure>
+<div class="grid2">
+  <figure class="plain">
+    <a href="img/wm-message-gain.png"><img src="img/wm-message-gain.png" alt="Validation prediction loss of the world model with and without messages, and the loss reduction by situation." loading="lazy"></a>
+    <figcaption>Messages lower the world model's validation prediction loss by 23%. Right: the reduction grouped by what the receiver and the messages observe.</figcaption>
+  </figure>
+  <figure class="plain">
+    <a href="img/counterfactual.png"><img src="img/counterfactual.png" alt="Change in success rate when messages stop from step t on, relative to the control." loading="lazy"></a>
+    <figcaption>Stopping the messages from step t on. Stopping them from the start costs 5.7 points of success.</figcaption>
+  </figure>
+</div>
+
+<h3>Generalization</h3>
+<p>The trained models are evaluated without retraining on changes not seen during training: edited layouts, fewer
+  and more walls, changes in the middle of an episode, and larger teams.</p>
+<figure class="plain">
+  <a href="img/generalization-examples.png"><img src="img/generalization-examples.png" alt="Changes used to evaluate generalization: an edited training layout, fewer and more walls, a moved goal, a wall closing the shortest path, and six agents." loading="lazy"></a>
+  <figcaption>(a) Edited training layout; dashed squares: moved walls. (b), (c) Fewer and more walls. (d) Moved goal;
+    dashed square: previous cell. (e) Wall (hatched) closing the shortest path. (f) Six agents.</figcaption>
+</figure>
+
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr><th rowspan="2">Change</th><th colspan="3">C3-WM</th><th rowspan="2">OmniVLA-edge</th><th rowspan="2">TarMAC</th></tr>
+    <tr><th>No messages</th><th>Messages</th><th>Gain [95% CI]</th></tr>
+  </thead>
+  <tbody>
+    <tr class="group"><td colspan="6">Layouts</td></tr>
+    <tr><td>3 cells edited</td><td>84.6</td><td>89.9</td><td>+5.4 <span class="ci">[3.2, 7.5]</span></td><td>–</td><td>–</td></tr>
+    <tr><td>12 cells edited</td><td>77.8</td><td>84.3</td><td>+6.4 <span class="ci">[4.3, 8.7]</span></td><td>–</td><td>–</td></tr>
+    <tr><td>Test layouts</td><td>83.3</td><td>89.2</td><td>+5.9 <span class="ci">[3.8, 7.9]</span></td><td>85.5</td><td>12.0</td></tr>
+    <tr><td>Fewer walls</td><td>90.8</td><td>99.1</td><td>+8.3 <span class="ci">[6.5, 10.2]</span></td><td>95.9</td><td>35.4</td></tr>
+    <tr><td>More walls</td><td>41.5</td><td>45.8</td><td>+4.3 <span class="ci">[1.7, 7.0]</span></td><td>40.3</td><td>0.7</td></tr>
+    <tr class="group"><td colspan="6">Change during the episode</td></tr>
+    <tr><td>Goal moves, after it is seen</td><td>52.5</td><td>73.5</td><td>+21.0 <span class="ci">[17.6, 24.5]</span></td><td>78.9</td><td>7.8</td></tr>
+    <tr><td>Goal moves at step 20</td><td>75.5</td><td>82.9</td><td>+7.4 <span class="ci">[4.4, 10.4]</span></td><td>83.7</td><td>8.3</td></tr>
+    <tr><td>Wall closes the path</td><td>56.6</td><td>59.2</td><td>+2.5 <span class="ci">[−0.5, 5.6]</span></td><td>63.8</td><td>3.9</td></tr>
+    <tr class="group"><td colspan="6">Change during the episode, with memory reset</td></tr>
+    <tr><td>No change</td><td>84.1</td><td>91.0</td><td>+6.9 <span class="ci">[4.8, 9.0]</span></td><td>–</td><td>–</td></tr>
+    <tr><td>Goal moves, after it is seen</td><td>68.3</td><td>83.2</td><td>+14.9 <span class="ci">[11.7, 18.0]</span></td><td>–</td><td>–</td></tr>
+    <tr><td>Goal moves at step 20</td><td>81.3</td><td>88.6</td><td>+7.2 <span class="ci">[4.6, 10.1]</span></td><td>–</td><td>–</td></tr>
+    <tr><td>Wall closes the path</td><td>58.6</td><td>63.1</td><td>+4.5 <span class="ci">[1.6, 7.5]</span></td><td>–</td><td>–</td></tr>
+    <tr class="group"><td colspan="6">Number of agents</td></tr>
+    <tr><td>N = 3</td><td>78.0</td><td>87.6</td><td>+9.6 <span class="ci">[7.3, 11.8]</span></td><td>78.9</td><td>6.1</td></tr>
+    <tr><td>N = 4</td><td>72.1</td><td>84.7</td><td>+12.6 <span class="ci">[10.2, 15.0]</span></td><td>75.9</td><td>3.6</td></tr>
+    <tr><td>N = 5</td><td>65.9</td><td>83.6</td><td>+17.7 <span class="ci">[15.0, 20.3]</span></td><td>72.8</td><td>2.3</td></tr>
+    <tr><td>N = 6</td><td>62.1</td><td>81.9</td><td>+19.8 <span class="ci">[17.0, 22.8]</span></td><td>69.1</td><td>1.6</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="note">Success rate (%). Gain: success with messages minus without, on the same episodes. Edited: training
+  layouts with walls moved in a median of 3 or 12 cells. All other rows use the test layouts.</p>
+
+<p>Communication raises the success rate in every setting. The gain is largest when the goal moves after an agent
+  has seen it (+21.0 points): the agent that finds the new goal tells its partner. The world model detects these
+  changes through its prediction error, which reaches 12.7 and 18.9 times its usual level after the goal moves and
+  after a wall appears. Resetting an agent's memory when this error is high improves success in all three change
+  conditions without hurting unchanged episodes. With larger teams, the communication gain grows from 5.9 points with
+  two agents to 19.8 points with six, and C3-WM with messages loses only 7.3 points of success, against 21.2 points
+  without messages and 16.4 points for OmniVLA-edge.</p>
+
+<h3>Robustness of the planner</h3>
+<figure class="plain">
+  <a href="img/ablation.png"><img src="img/ablation.png" alt="Sensitivity of C3-WM to the planning horizon and to the one-step prediction error." loading="lazy"></a>
+  <figcaption>Sensitivity to the planning horizon (left) and to the accuracy of the world model (right), with 95%
+    confidence intervals.</figcaption>
+</figure>
+
+<h2>Citation</h2>
+<pre>@article{elbakary2026c3wm,
+  title  = {C3-WM: A Communication-Control Co-adaptive World Model for Networked Multi-Agent Systems},
+  author = {Elbakary, Ahmed and Weeraddana, Chathuranga and Bennis, Mehdi},
+  year   = {2026}
+}</pre>
+
+<footer>Centre for Wireless Communications, University of Oulu</footer>
+</main>
+</div>
+<script>
+(function () {
+  var hero = document.querySelector('.hero');
+  var title = document.querySelector('.hero-title');
+  var video = document.querySelector('.hero-video');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduce && video) { video.removeAttribute('autoplay'); video.pause(); }
+  var ticking = false;
+  function update() {
+    ticking = false;
+    var h = hero.offsetHeight, y = Math.min(window.scrollY, h);
+    if (!reduce) {
+      var f = y / h;
+      title.style.transform = 'translateY(' + (-y * 0.25) + 'px) scale(' + (1 - f * 0.06) + ')';
+      title.style.opacity = String(Math.max(0, 1 - f * 1.6));
+      video.style.transform = 'scale(' + (1 + f * 0.05) + ')';
+    }
+    if (video && !reduce) {
+      if (window.scrollY > h && !video.paused) video.pause();
+      else if (window.scrollY <= h && video.paused) video.play().catch(function () {});
+    }
+  }
+  window.addEventListener('scroll', function () {
+    if (!ticking) { ticking = true; requestAnimationFrame(update); }
+  }, { passive: true });
+  update();
+})();
+</script>
+</body>
+</html>

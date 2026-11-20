@@ -55,6 +55,15 @@ below names the file it produces, which a later step takes as an argument.
 
 ### 1. Dataset
 
+The dataset used in the paper is on Hugging Face:
+
+```bash
+hf download ahmedkhaled/C3-wm-V1 --repo-type=dataset \
+    --local-dir $C3WM_ROOT/datasets/c3_wm/findgoal/findgoal_layouts
+```
+
+It can also be collected again:
+
 ```bash
 python collect_world.py
 ```
@@ -174,6 +183,9 @@ python deploy.py $D "methods=[no communication]" episodes=256 record.method=no-c
 python deploy.py $D "methods=[perfect channel]" episodes=256 record.method=perfect-channel record.dir=$OUT/with
 python filmstrip.py --without $OUT/without <its results.json> --with $OUT/with <its results.json> --layout-group OOD
 ```
+
+The same recordings can be rendered as side-by-side videos (MP4) with
+`python render_episodes.py --without ... --with ... --layouts-file ../configs/deploy/layouts.json --seeds 1`.
 
 The effect of messages on the world model's prediction loss is computed with
 `python message_gain.py checkpoints.jepa=$WM checkpoints.vqvae=$VQVAE`. The predictor fine-tuned from random
